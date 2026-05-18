@@ -1030,11 +1030,17 @@
   </nav>
   <div class="container">
     <div class="profile-card" id="home-profile">
-      <div class="profile-avatar" id="home-avatar">🐶</div>
+      <div class="profile-avatar-wrap" style="position:relative; cursor:pointer; flex-shrink:0; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="document.getElementById('edit-avatar-input').click()" title="更換頭貼">
+        <div class="profile-avatar" id="home-avatar">🐶</div>
+        <div class="edit-avatar-badge" style="position:absolute; bottom:0; right:0; background:var(--white); border-radius:50%; width:26px; height:26px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 5px rgba(0,0,0,0.2); font-size:12px; border:2px solid var(--orange);">✏️</div>
+        <input type="file" id="edit-avatar-input" accept="image/*" style="display:none;" onchange="doEditAvatar(event)" />
+      </div>
       <div class="profile-info">
         <div class="profile-name" id="home-name">名稱</div>
         <div class="profile-id" id="home-id">@ID</div>
-        <div class="profile-stats" id="home-stats">我的貼文數：0 篇</div>
+        <div class="profile-bio" id="home-bio" style="font-size:0.9rem; color:var(--text-light); margin-top:6px; line-height:1.4;">這是自我介紹區</div>
+        <button style="margin-top:8px; padding:4px 12px; border-radius:12px; border:1px solid var(--orange); background:var(--orange-pale); color:var(--orange); cursor:pointer; font-size:0.8rem; font-weight:bold; transition:all 0.2s;" onclick="editBio()" onmouseover="this.style.background='var(--orange)'; this.style.color='white'" onmouseout="this.style.background='var(--orange-pale)'; this.style.color='var(--orange)'">✏️ 編輯自我介紹</button>
+        <div class="profile-stats" id="home-stats" style="margin-top:8px;">我的貼文數：0 篇</div>
       </div>
     </div>
     <button class="new-post-btn" onclick="showPage('create')" aria-label="新增貼文">✏️ 新增貼文</button>
@@ -1056,7 +1062,8 @@
       <div class="profile-info">
         <div class="profile-name" id="user-name">名稱</div>
         <div class="profile-id" id="user-id">@ID</div>
-        <div class="profile-stats" id="user-stats">貼文數：0 篇</div>
+        <div class="profile-bio" id="user-bio" style="font-size:0.9rem; color:var(--text-light); margin-top:6px; line-height:1.4;">這是自我介紹區</div>
+        <div class="profile-stats" id="user-stats" style="margin-top:8px;">貼文數：0 篇</div>
       </div>
     </div>
     <div class="section-title">📝 貼文牆</div>
@@ -1416,6 +1423,62 @@ function doLogout() {
   showToast('👋 已登出，掰掰～');
 }
 
+function doEditAvatar(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const newAvatarBase64 = ev.target.result;
+    const user = getCurrentUser();
+    if (!user) return;
+    
+    user.avatar = newAvatarBase64;
+    setCurrentUser(user);
+    
+    const users = getUsers();
+    const uIndex = users.findIndex(u => u.id === user.id);
+    if (uIndex > -1) {
+      users[uIndex].avatar = newAvatarBase64;
+      saveUsers(users);
+    }
+    
+    const posts = getPosts();
+    posts.forEach(p => {
+      if (p.authorId === user.id) p.authorAvatar = newAvatarBase64;
+      p.comments.forEach(c => {
+        if (c.userId === user.id) c.userAvatar = newAvatarBase64;
+      });
+    });
+    savePosts(posts);
+    
+    showToast('✨ 頭貼已成功更新！');
+    renderHomePage();
+  };
+  reader.readAsDataURL(file);
+}
+
+function editBio() {
+  const user = getCurrentUser();
+  if (!user) return;
+  const currentBio = user.bio || '';
+  const newBio = prompt('請輸入您的自我介紹：', currentBio);
+  
+  if (newBio !== null) {
+    user.bio = newBio.trim();
+    setCurrentUser(user);
+    
+    const users = getUsers();
+    const uIndex = users.findIndex(u => u.id === user.id);
+    if (uIndex > -1) {
+      users[uIndex].bio = user.bio;
+      saveUsers(users);
+    }
+    
+    document.getElementById('home-bio').textContent = user.bio || '這名鏟屎官還沒有填寫自我介紹喔🐾';
+    showToast('✏️ 自我介紹已更新！');
+  }
+}
+
 // ===========================
 // HOME PAGE
 // ===========================
@@ -1428,6 +1491,7 @@ function renderHomePage() {
   setAvatar('home-avatar', user.avatar, user.avatarEmoji || '🐶');
   document.getElementById('home-name').textContent = user.name;
   document.getElementById('home-id').textContent = '@' + user.id;
+  document.getElementById('home-bio').textContent = user.bio || '這名鏟屎官還沒有填寫自我介紹喔🐾';
 
   const posts = getPosts().filter(p => p.authorId === user.id);
   document.getElementById('home-stats').textContent = `我的貼文數：${posts.length} 篇`;
@@ -1574,6 +1638,7 @@ function viewUserPage(userId) {
   setAvatar('user-avatar', targetUser.avatar, targetUser.avatarEmoji || '🐶');
   document.getElementById('user-name').textContent = targetUser.name;
   document.getElementById('user-id').textContent = '@' + targetUser.id;
+  document.getElementById('user-bio').textContent = targetUser.bio || '這名鏟屎官還沒有填寫自我介紹喔🐾';
   
   const posts = getPosts().filter(p => p.authorId === userId);
   document.getElementById('user-stats').textContent = `貼文數：${posts.length} 篇`;
@@ -1606,7 +1671,7 @@ function renderPostCard(post, currentUser, context) {
     ? `<img src="${post.image}" class="post-image" alt="貼文圖片" onclick="openLightbox('${post.postId}')" />`
     : '';
 
-  const commentsHtml = post.comments.map(c => renderComment(c)).join('');
+  const commentsHtml = post.comments.map(c => renderComment(c, currentUser, post.postId)).join('');
 
   const inputHtml = currentUser
     ? `<div class="comment-input-area">
@@ -1651,18 +1716,29 @@ function renderPostCard(post, currentUser, context) {
     </div>`;
 }
 
-function renderComment(c) {
+function renderComment(c, currentUser, postId) {
   const avatarHtml = c.userAvatar
     ? `<img src="${c.userAvatar}" class="comment-avatar" alt="頭貼" />`
     : `<div class="comment-avatar">${c.userEmoji || '🐾'}</div>`;
 
+  const isOwner = currentUser && currentUser.id === c.userId;
+  const actionsHtml = isOwner 
+    ? `<div style="display:flex; gap:8px; margin-top:4px; font-size:0.75rem;">
+         <span style="cursor:pointer; color:var(--orange);" onclick="editComment('${postId}', '${c.time}')">✏️ 編輯</span>
+         <span style="cursor:pointer; color:#ef5350;" onclick="deleteComment('${postId}', '${c.time}')">🗑️ 刪除</span>
+       </div>`
+    : '';
+
   return `
-    <div class="comment-item">
+    <div class="comment-item" id="comment-${postId}-${c.time}">
       <div style="cursor: pointer;" onclick="viewUserPage('${c.userId}')" title="查看個人頁面">${avatarHtml}</div>
-      <div class="comment-bubble">
+      <div class="comment-bubble" style="flex:1;">
         <div class="comment-author" style="cursor: pointer;" onclick="viewUserPage('${c.userId}')">${escHtml(c.userName)}</div>
-        <div class="comment-text">${escHtml(c.text)}</div>
-        <div class="comment-time">${timeAgo(c.time)}</div>
+        <div class="comment-text" id="comment-text-${postId}-${c.time}">${escHtml(c.text)}</div>
+        <div class="comment-time" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${timeAgo(c.time)}</span>
+          ${actionsHtml}
+        </div>
       </div>
     </div>`;
 }
@@ -1739,13 +1815,55 @@ function sendComment(postId) {
   savePosts(posts);
 
   const listEl = document.getElementById(`comments-list-${postId}`);
-  if (listEl) listEl.insertAdjacentHTML('beforeend', renderComment(comment));
+  if (listEl) listEl.insertAdjacentHTML('beforeend', renderComment(comment, user, postId));
 
   const countEl = document.getElementById(`comment-count-${postId}`);
   if (countEl) countEl.textContent = post.comments.length;
 
   if (input) input.value = '';
   showToast('💬 留言成功！');
+}
+
+function deleteComment(postId, timeStr) {
+  const time = parseInt(timeStr);
+  openModal('🗑️', '刪除留言', '確定要刪除這則留言嗎？', 'delete', () => {
+    const posts = getPosts();
+    const post = posts.find(p => p.postId === postId);
+    if (!post) return;
+    
+    post.comments = post.comments.filter(c => c.time !== time);
+    savePosts(posts);
+    showToast('🗑️ 留言已刪除！');
+    
+    const commentEl = document.getElementById(`comment-${postId}-${time}`);
+    if (commentEl) commentEl.remove();
+    
+    const countEl = document.getElementById(`comment-count-${postId}`);
+    if (countEl) countEl.textContent = post.comments.length;
+  });
+}
+
+function editComment(postId, timeStr) {
+  const time = parseInt(timeStr);
+  const textEl = document.getElementById(`comment-text-${postId}-${time}`);
+  if (!textEl) return;
+  
+  const currentText = textEl.textContent;
+  const newText = prompt('編輯您的留言：', currentText);
+  
+  if (newText !== null && newText.trim() !== '' && newText.trim() !== currentText) {
+    const posts = getPosts();
+    const post = posts.find(p => p.postId === postId);
+    if (!post) return;
+    
+    const comment = post.comments.find(c => c.time === time);
+    if (comment) {
+      comment.text = newText.trim();
+      savePosts(posts);
+      textEl.textContent = comment.text;
+      showToast('✏️ 留言已更新！');
+    }
+  }
 }
 
 function openLightbox(postId) {
